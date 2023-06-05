@@ -8,4 +8,4 @@ RUN npm install
 
 COPY . .
 
-CMD [ "node", "your-application-file.js" ]
+CMD [ "node", "app2.js" ]
