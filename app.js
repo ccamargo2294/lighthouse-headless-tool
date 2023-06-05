@@ -1,45 +1,67 @@
-import { launch, KnownDevices } from "puppeteer";
+import { launch } from "puppeteer";
 import lighthouse from "lighthouse";
 import fs from "fs";
 
+const getArgs = () => {
+  const args = process.argv.slice(2);
+  const params = {
+    isMobile: true,
+    isProd: false,
+  };
+
+  args.forEach((arg) => {
+    const [key, value] = arg.split("=");
+    params[key] = value === "true";
+  });
+
+  return params;
+};
+
 async function runLighthouse() {
+  const { isMobile, isProd } = getArgs();
+
   const browser = await launch({
     headless: "new",
-    defaultViewport: {
-      width: 1920,
-      height: 1080,
-    },
   });
   const page = await browser.newPage();
 
-  const desktopDevice = KnownDevices["iPad Pro landscape"];
-  await page.emulate(desktopDevice);
-
   // Configure Lighthouse options
   const options = {
+    logLevel: "info",
     port: new URL(browser.wsEndpoint()).port,
     output: "json", // Set output format to JSON
-    outputPath: "lighthouse-results.json",
-    emulatedFormFactor: "desktop",
+    onlyCategories: ["performance"], // Only run Performance audits
+    ...(isMobile
+      ? {}
+      : {
+          formFactor: "desktop",
+          screenEmulation: {
+            width: 1920,
+            height: 1080,
+            deviceScaleFactor: 2,
+            mobile: false,
+          },
+        }),
   };
 
-  console.log("Running lighthouse...");
-
   // Run Lighthouse audit
-  const report = await lighthouse(
-    "https://www.yamamay.com/it_it/?workspace=performancetestprod",
-    //"https://www.yamamay.com/it_it/",
+  const runnerResult = await lighthouse(
+    isProd
+      ? "https://www.yamamay.com/it_it/"
+      : "https://www.yamamay.com/it_it/?workspace=performancetestprod",
     options
   );
-  const results = report.lhr;
 
-  // Process and analyze the results as needed
-  //console.log(results);
+  // `.report` is the HTML report as a string
+  const report = runnerResult.report;
+  fs.writeFileSync(`reports/lhreport-${Date.now()}.json`, report);
 
-  // Write the results to a JSON file
-  fs.writeFileSync("lighthouse-results.json", JSON.stringify(results));
-
-  console.log("Execution DONE");
+  // `.lhr` is the Lighthouse Result as a JS object
+  console.log("Report is done for", runnerResult.lhr.finalDisplayedUrl);
+  console.log(
+    "Performance score was",
+    runnerResult.lhr.categories.performance.score * 100
+  );
 
   await browser.close();
 }
